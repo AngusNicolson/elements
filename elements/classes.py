@@ -1,4 +1,3 @@
-
 from typing import List
 import warnings
 
@@ -6,11 +5,26 @@ import numpy as np
 
 from elements.shapes import square, circle, triangle, cross, plus
 from elements.colors import color_adjustment, colors
-from elements.textures import random_spots, regular_spots, polka, chequerboard, striped_diagonal, striped_vertical, striped_horizontal, striped_diagonal_alt
+from elements.textures import (
+    random_spots,
+    regular_spots,
+    polka,
+    chequerboard,
+    striped_diagonal,
+    striped_vertical,
+    striped_horizontal,
+    striped_diagonal_alt,
+)
 
 SEED_MAX = 1000000
 
-shapes = {"square": square, "circle": circle, "triangle": triangle, "cross": cross, "plus": plus}
+shapes = {
+    "square": square,
+    "circle": circle,
+    "triangle": triangle,
+    "cross": cross,
+    "plus": plus,
+}
 textures = {
     "spots": {
         "random": random_spots,
@@ -23,7 +37,7 @@ textures = {
         "vertical": striped_vertical,
         "diagonal": striped_diagonal,
         "diagonal_alt": striped_diagonal_alt,
-    }
+    },
 }
 
 
@@ -84,15 +98,24 @@ class ElementImage:
         self.img = np.zeros((size, size, 3), dtype=np.uint8) + 255
         self.locs = self.choose_locations(size, elements, loc_seed)
 
-        self.config = {"elements": [v.config for v in self.elements], "size": self.size, "loc_seed": self.loc_seed}
-        self.info = {**self.config, "locs": self.locs, "class_labels": self.class_labels, "class_labels_oh": self.class_labels_oh}
+        self.config = {
+            "elements": [v.config for v in self.elements],
+            "size": self.size,
+            "loc_seed": self.loc_seed,
+        }
+        self.info = {
+            **self.config,
+            "locs": self.locs,
+            "class_labels": self.class_labels,
+            "class_labels_oh": self.class_labels_oh,
+        }
 
         for i in range(len(elements)):
             self.img = self.place_element(self.img, self.elements[i], self.locs[i])
 
     @staticmethod
     def place_element(canvas, element, loc):
-        canvas[loc[0]:loc[0] + len(element), loc[1]:loc[1] + len(element)] = element.img
+        canvas[loc[0] : loc[0] + len(element), loc[1] : loc[1] + len(element)] = element.img
         return canvas
 
     def __len__(self):
@@ -141,7 +164,12 @@ class ElementImage:
 
                 overlap = False
                 for i, coord in enumerate(locations):
-                    if (x < coord[0] + element_sizes[i]) and (x + element_size > coord[0]) and (y < coord[1] + element_sizes[i]) and (y + element_size > coord[1]):
+                    if (
+                        (x < coord[0] + element_sizes[i])
+                        and (x + element_size > coord[0])
+                        and (y < coord[1] + element_sizes[i])
+                        and (y + element_size > coord[1])
+                    ):
                         overlap = True
                         break
                 if overlap:
@@ -155,7 +183,9 @@ class ElementImage:
                     raise ValueError("Not all elements could be placed without overlapping!")
                 else:
                     remaining_elements = len(element_sizes) - len(locations)
-                    warnings.warn(f"Not all elements could be placed without overlapping! Placing remaining {remaining_elements} elements randomly.")
+                    warnings.warn(
+                        f"Not all elements could be placed without overlapping! Placing remaining {remaining_elements} elements randomly."
+                    )
                     for i in range(remaining_elements):
                         x, y = rng.integers(0, canvas_size - element_sizes[len(locations)], 2)
                         locations.append((x, y))
@@ -163,7 +193,17 @@ class ElementImage:
 
 
 class ElementDataset:
-    def __init__(self, allowed, class_configs, n, img_size, element_n, element_size, element_seed, loc_seed):
+    def __init__(
+        self,
+        allowed,
+        class_configs,
+        n,
+        img_size,
+        element_n,
+        element_size,
+        element_seed,
+        loc_seed,
+    ):
         self.allowed = allowed
         self.class_configs = class_configs
         self.n = n
@@ -186,7 +226,13 @@ class ElementDataset:
         return [img.img, img.class_labels_oh]
 
     def get_item(self, idx):
-        element_configs = self.choose_element_configs(self.element_n, self.allowed["shapes"], self.allowed["colors"], self.allowed["textures"], self.element_seeds[idx])
+        element_configs = self.choose_element_configs(
+            self.element_n,
+            self.allowed["shapes"],
+            self.allowed["colors"],
+            self.allowed["textures"],
+            self.element_seeds[idx],
+        )
         elements = [Element(self.element_size, **v) for v in element_configs]
         img = ElementImage(elements, self.img_size, self.loc_seeds[idx])
         img.update_class_labels(self.class_configs)
@@ -209,4 +255,3 @@ class ElementDataset:
             )
             configs.append(config)
         return configs
-
