@@ -2,6 +2,7 @@ from typing import List
 import warnings
 
 import numpy as np
+from torch.utils.data import Dataset
 
 from elements.shapes import square, circle, triangle, cross, plus
 from elements.colors import color_adjustment, colors
@@ -41,7 +42,7 @@ textures = {
 }
 
 
-class Element:
+class Element(Dataset):
     def __init__(self, size, shape, color, texture=None, color_seed=None, texture_seed=None):
         self.size = size
         self.shape = shape
