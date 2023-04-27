@@ -3,6 +3,7 @@ import warnings
 
 import numpy as np
 from torch.utils.data import Dataset
+import torchvision.transforms as T
 
 from elements.shapes import square, circle, triangle, cross, plus
 from elements.colors import color_adjustment, colors
@@ -137,7 +138,7 @@ class ElementImage:
             if self.belongs_to_class(config):
                 classes.append(i)
         self.class_labels = classes
-        self.class_labels_oh = np.eye(len(class_configs), dtype=int)[classes].sum(axis=0)
+        self.class_labels_oh = np.eye(len(class_configs))[classes].sum(axis=0)
         self.info["class_labels"] = self.class_labels
         self.info["class_labels_oh"] = self.class_labels_oh
         return classes
@@ -222,9 +223,14 @@ class ElementDataset:
         self.element_seeds = self.element_rng.integers(0, SEED_MAX, self.n)
         self.loc_seeds = self.loc_rng.integers(0, SEED_MAX, self.n)
 
+        self.transform = T.Compose([
+            T.ToTensor(),
+            ])
+
     def __getitem__(self, idx):
-        img = self.get_item(idx)
-        return [img.img, img.class_labels_oh]
+        item = self.get_item(idx)
+        img = self.transform(item.img)
+        return [img, item.class_labels_oh]
 
     def get_item(self, idx):
         element_configs = self.choose_element_configs(
