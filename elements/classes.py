@@ -269,3 +269,12 @@ class ElementDataset:
             )
             configs.append(config)
         return configs
+
+    def save_imgs(self, prefix, indices=None):
+        if indices is None:
+            indices = range(self.n)
+
+        for i in indices:
+            img = self.get_item(i)
+            img = Image.fromarray(img.img)
+            img.save(f"{prefix}{i:04d}.jpg")
