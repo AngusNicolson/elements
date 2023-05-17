@@ -4,6 +4,7 @@ import warnings
 import numpy as np
 from torch.utils.data import Dataset
 import torchvision.transforms as T
+from PIL import Image
 
 from elements.shapes import square, circle, triangle, cross, plus
 from elements.colors import color_adjustment, colors
@@ -203,6 +204,7 @@ class ElementDataset:
         img_size,
         element_n,
         element_size,
+        element_size_delta,
         element_seed,
         loc_seed,
     ):
@@ -212,10 +214,13 @@ class ElementDataset:
         self.img_size = img_size
         self.element_n = element_n
         self.element_size = element_size
+        self.element_size_delta = element_size_delta
         self.element_seed = element_seed
         self.loc_seed = loc_seed
 
         self.config = {k: v for k, v in vars(self).items()}
+        self.allowed["sizes"] = (self.element_size - self.element_size_delta,
+                                 self.element_size + self.element_size_delta)
 
         self.element_rng = np.random.default_rng(self.element_seed)
         self.loc_rng = np.random.default_rng(self.loc_seed)
@@ -235,12 +240,13 @@ class ElementDataset:
     def get_item(self, idx):
         element_configs = self.choose_element_configs(
             self.element_n,
+            self.allowed["sizes"],
             self.allowed["shapes"],
             self.allowed["colors"],
             self.allowed["textures"],
             self.element_seeds[idx],
         )
-        elements = [Element(self.element_size, **v) for v in element_configs]
+        elements = [Element(**v) for v in element_configs]
         img = ElementImage(elements, self.img_size, self.loc_seeds[idx])
         img.update_class_labels(self.class_configs)
         return img
@@ -249,11 +255,12 @@ class ElementDataset:
         return self.n
 
     @staticmethod
-    def choose_element_configs(n, allowed_shapes, allowed_colors, allowed_textures, seed=None):
+    def choose_element_configs(n, allowed_sizes, allowed_shapes, allowed_colors, allowed_textures, seed=None):
         rng = np.random.default_rng(seed)
         configs = []
         for i in range(n):
             config = dict(
+                size=rng.integers(*allowed_sizes),
                 shape=rng.choice(allowed_shapes),
                 color=rng.choice(allowed_colors),
                 color_seed=rng.integers(SEED_MAX),
