@@ -1,3 +1,5 @@
+import itertools
+from copy import deepcopy
 from typing import List
 import warnings
 
@@ -207,6 +209,7 @@ class ElementDataset:
         element_size_delta,
         element_seed,
         loc_seed,
+        allowed_combinations=None
     ):
         self.allowed = allowed
         self.class_configs = class_configs
@@ -217,6 +220,7 @@ class ElementDataset:
         self.element_size_delta = element_size_delta
         self.element_seed = element_seed
         self.loc_seed = loc_seed
+        self.allowed_combinations = allowed_combinations
 
         self.config = {k: v for k, v in vars(self).items()}
         self.allowed["sizes"] = (self.element_size - self.element_size_delta,
@@ -245,6 +249,7 @@ class ElementDataset:
             self.allowed["colors"],
             self.allowed["textures"],
             self.element_seeds[idx],
+            allowed_combinations=self.allowed_combinations
         )
         elements = [Element(**v) for v in element_configs]
         img = ElementImage(elements, self.img_size, self.loc_seeds[idx])
@@ -255,10 +260,16 @@ class ElementDataset:
         return self.n
 
     @staticmethod
-    def choose_element_configs(n, allowed_sizes, allowed_shapes, allowed_colors, allowed_textures, seed=None):
+    def choose_element_configs(n, allowed_sizes, allowed_shapes, allowed_colors, allowed_textures, seed=None, allowed_combinations=None, max_iter=1000):
         rng = np.random.default_rng(seed)
+
+        if allowed_combinations is None:
+            allowed_combinations = list(itertools.product(allowed_shapes, allowed_colors, allowed_textures))
+
         configs = []
-        for i in range(n):
+        i = 0
+        while len(configs) < n:
+            i += 1
             config = dict(
                 size=rng.integers(*allowed_sizes),
                 shape=rng.choice(allowed_shapes),
@@ -267,7 +278,11 @@ class ElementDataset:
                 texture=rng.choice(allowed_textures),
                 texture_seed=rng.integers(SEED_MAX),
             )
-            configs.append(config)
+            if (config["shape"], config["color"], config["texture"]) in allowed_combinations:
+                configs.append(config)
+            if i > max_iter:
+                raise TimeoutError(f"Only {len(configs)} out of {n} chosen "
+                                   f"in the max no. iterations ({max_iter})")
         return configs
 
     def save_imgs(self, prefix, indices=None):
