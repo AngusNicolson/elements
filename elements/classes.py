@@ -293,3 +293,90 @@ class ElementDataset:
             img = self.get_item(i)
             img = Image.fromarray(img.img)
             img.save(f"{prefix}{i:04d}.jpg")
+
+
+class GroupedElementDataset(ElementDataset):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.current_label = None
+        all_class_labels = np.zeros((self.n, len(self.class_configs)))
+        for i in range(len(self)):
+            img = self.get_item(i)
+            all_class_labels[i] = img.class_labels_oh
+
+        self.all_class_labels = all_class_labels
+        # Create a list of img indices which belong to each class
+        self.idx_array = [np.where(all_class_labels[:, i])[0] for i in range(all_class_labels.shape[1])]
+
+    def __getitem__(self, idx):
+        item = self.get_item(self.idx_array[self.current_label][idx])
+        img = self.transform(item.img)
+        return [img, item.class_labels_oh]
+
+    def __len__(self):
+        if self.current_label is None:
+            return self.n
+        else:
+            return len(self.idx_array[self.current_label])
+
+
+class ConceptElementDatasetCreator:
+    """On call, returns an ElementDataset (or child of).
+     The dataset is either made up of one of these three things:
+     - a single class
+     - a single concept
+     - a random selection of images
+     For use with TCAV."""
+    def __init__(self, allowed, class_configs, dataset_kwargs):
+        self.allowed = allowed
+        self.class_configs = class_configs
+        self.dataset_kwargs = dataset_kwargs
+        self.n_classes = len(class_configs)
+
+        self.class_dataset = GroupedElementDataset(allowed=allowed, class_configs=class_configs, **self.dataset_kwargs)
+
+        self.base_element_seed = 2023
+        self.base_loc_seed = 1997
+        self.seed_max = 1000000
+
+    def __call__(self, concept):
+        try:
+            concept = int(concept)
+            self.class_dataset.current_label = concept
+            return self.class_dataset
+        except ValueError:
+            if "random" in concept:
+                random_idx = int(concept.split("_")[-1])
+                return self.create_random_dataset(random_idx)
+            else:
+                return self.create_concept_dataset(concept)
+
+    def create_random_dataset(self, idx):
+        # Probably more complicated than it needs to be, but this makes it very unlikely
+        # that we'll have two random datasets with the same random seed or that they're
+        # the same as in the train or test sets of the model itself
+        element_rng = np.random.default_rng(self.base_element_seed + idx)
+        loc_rng = np.random.default_rng(self.base_loc_seed + idx)
+        element_seed = element_rng.integers(self.seed_max)
+        loc_seed = loc_rng.integers(self.seed_max)
+
+        kwargs = deepcopy(self.dataset_kwargs)
+        kwargs["element_seed"] = element_seed
+        kwargs["loc_seed"] = loc_seed
+        dataset = ElementDataset(self.allowed, self.class_configs, **kwargs)
+        return dataset
+
+    def create_concept_dataset(self, concept):
+        concept_type = None
+        for k, v in self.allowed.items():
+            if concept in v:
+                concept_type = k
+                break
+        if concept_type is None:
+            raise ValueError(f"Concept {concept} not found in allowed options!")
+
+        allowed_concept = deepcopy(self.allowed)
+        allowed_concept[concept_type] = [concept]
+
+        dataset = ElementDataset(allowed_concept, self.class_configs, **self.dataset_kwargs)
+        return dataset
