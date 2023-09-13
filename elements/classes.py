@@ -327,13 +327,14 @@ class ConceptElementDatasetCreator:
      - a single concept
      - a random selection of images
      For use with TCAV."""
-    def __init__(self, allowed, class_configs, dataset_kwargs):
+    def __init__(self, allowed, class_configs, dataset_kwargs, allowed_combinations=None):
         self.allowed = allowed
         self.class_configs = class_configs
+        self.allowed_combinations = allowed_combinations
         self.dataset_kwargs = dataset_kwargs
         self.n_classes = len(class_configs)
 
-        self.class_dataset = GroupedElementDataset(allowed=allowed, class_configs=class_configs, **self.dataset_kwargs)
+        self.class_dataset = GroupedElementDataset(allowed=allowed, class_configs=class_configs, allowed_combinations=self.allowed_combinations, **self.dataset_kwargs)
 
         self.base_element_seed = 2023
         self.base_loc_seed = 1997
@@ -363,7 +364,7 @@ class ConceptElementDatasetCreator:
         kwargs = deepcopy(self.dataset_kwargs)
         kwargs["element_seed"] = element_seed
         kwargs["loc_seed"] = loc_seed
-        dataset = ElementDataset(self.allowed, self.class_configs, **kwargs)
+        dataset = ElementDataset(self.allowed, self.class_configs, allowed_combinations=self.allowed_combinations, **kwargs)
         return dataset
 
     def create_concept_dataset(self, concept):
@@ -378,5 +379,5 @@ class ConceptElementDatasetCreator:
         allowed_concept = deepcopy(self.allowed)
         allowed_concept[concept_type] = [concept]
 
-        dataset = ElementDataset(allowed_concept, self.class_configs, **self.dataset_kwargs)
+        dataset = ElementDataset(allowed_concept, self.class_configs, allowed_combinations=self.allowed_combinations, **self.dataset_kwargs)
         return dataset
