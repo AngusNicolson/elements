@@ -93,20 +93,23 @@ class Element(Dataset):
 
 
 class ElementImage:
-    def __init__(self, elements: List[Element], size: int = 224, loc_seed: int = None):
+    def __init__(self, elements: List[Element], size: int = 224, loc_seed: int = None, loc_restrictions=None, place_remaining_randomly=True):
         self.elements = elements
         self.size = size
         self.loc_seed = loc_seed
         self.class_labels = None
         self.class_labels_oh = None
+        self.loc_restrictions = loc_restrictions
+        self.place_remaining_randomly = place_remaining_randomly
 
         self.img = np.zeros((size, size, 3), dtype=np.uint8) + 255
-        self.locs = self.choose_locations(size, elements, loc_seed)
+        self.locs = self.choose_locations(size, elements, loc_seed, loc_restrictions=loc_restrictions, place_remaining_randomly=place_remaining_randomly)
 
         self.config = {
             "elements": [v.config for v in self.elements],
             "size": self.size,
             "loc_seed": self.loc_seed,
+            "loc_restrictions": self.loc_restrictions
         }
         self.info = {
             **self.config,
@@ -120,7 +123,8 @@ class ElementImage:
 
     @staticmethod
     def place_element(canvas, element, loc):
-        canvas[loc[0] : loc[0] + len(element), loc[1] : loc[1] + len(element)] = element.img
+        if loc is not None:
+            canvas[loc[0]:loc[0] + len(element), loc[1]:loc[1] + len(element)] = element.img
         return canvas
 
     def __len__(self):
@@ -156,7 +160,11 @@ class ElementImage:
         return ElementImage(**config)
 
     @staticmethod
-    def choose_locations(canvas_size, elements, seed=None, max_attempts=100, raise_error=False):
+    def choose_locations(canvas_size, elements, seed=None, max_attempts=100, raise_error=False, loc_restrictions=None, place_remaining_randomly=True):
+        """
+        x and y are actually the wrong way round.
+        But they're just variable names so doesn't matter.
+        """
         rng = np.random.default_rng(seed)
         element_sizes = [len(element) for element in elements]
         locations = []
@@ -169,24 +177,31 @@ class ElementImage:
 
                 overlap = False
                 for i, coord in enumerate(locations):
-                    if (
-                        (x < coord[0] + element_sizes[i])
-                        and (x + element_size > coord[0])
-                        and (y < coord[1] + element_sizes[i])
-                        and (y + element_size > coord[1])
-                    ):
-                        overlap = True
+                    if coord is not None:
+                        overlap = check_overlap(x, y, element_size, element_sizes[i], coord)
+                    if overlap:
                         break
                 if overlap:
                     # If it overlaps, try a different position
                     continue
+
+                if loc_restrictions is not None:
+                    failed_restriction = False
+                    for loc_restriction in loc_restrictions:
+                        x_passes = check_restriction(loc_restriction[0], y)
+                        y_passes = check_restriction(loc_restriction[1], x)
+                        if (not x_passes) or (not y_passes):
+                            failed_restriction = True
+                    if failed_restriction:
+                        # If it fails a location restriction, try a different position
+                        continue
 
                 locations.append((x, y))
                 placed = True
             if not placed:
                 if raise_error:
                     raise ValueError("Not all elements could be placed without overlapping!")
-                else:
+                elif place_remaining_randomly:
                     remaining_elements = len(element_sizes) - len(locations)
                     warnings.warn(
                         f"Not all elements could be placed without overlapping! Placing remaining {remaining_elements} elements randomly."
@@ -194,7 +209,44 @@ class ElementImage:
                     for i in range(remaining_elements):
                         x, y = rng.integers(0, canvas_size - element_sizes[len(locations)], 2)
                         locations.append((x, y))
+                    break
+                else:
+                    remaining_elements = len(element_sizes) - len(locations)
+                    warnings.warn(
+                        f"Not all elements could be placed without overlapping! Missing {remaining_elements} elements."
+                    )
+                    for i in range(remaining_elements):
+                        locations.append(None)
+                    break
         return locations
+
+
+def check_restriction(restriction, v):
+    command = restriction[0]
+    value = int(restriction[1:])
+    if command == ">":
+        if v > value:
+            return True
+    elif command == "<":
+        if v < value:
+            return True
+    elif command == "=":
+        if v == value:
+            return True
+    else:
+        raise ValueError(f"Command {command} not recognised!")
+
+
+def check_overlap(x, y, element_size, element_size_2, coord):
+    if (
+        (x < coord[0] + element_size_2)
+        and (x + element_size > coord[0])
+        and (y < coord[1] + element_size_2)
+        and (y + element_size > coord[1])
+    ):
+        return True
+    else:
+        return False
 
 
 class ElementDataset:
@@ -209,7 +261,9 @@ class ElementDataset:
         element_size_delta,
         element_seed,
         loc_seed,
-        allowed_combinations=None
+        allowed_combinations=None,
+        loc_restrictions=None,
+        place_remaining_randomly=True,
     ):
         self.allowed = allowed
         self.class_configs = class_configs
@@ -221,6 +275,11 @@ class ElementDataset:
         self.element_seed = element_seed
         self.loc_seed = loc_seed
         self.allowed_combinations = allowed_combinations
+        if self.allowed_combinations is not None:
+            if type(self.allowed_combinations[0]) is list:
+                self.allowed_combinations = [tuple(v) for v in self.allowed_combinations]
+        self.loc_restrictions = loc_restrictions
+        self.place_remaining_randomly = place_remaining_randomly
 
         self.config = {k: v for k, v in vars(self).items()}
         self.allowed["sizes"] = (self.element_size - self.element_size_delta,
@@ -252,7 +311,9 @@ class ElementDataset:
             allowed_combinations=self.allowed_combinations
         )
         elements = [Element(**v) for v in element_configs]
-        img = ElementImage(elements, self.img_size, self.loc_seeds[idx])
+        img = ElementImage(elements, self.img_size, self.loc_seeds[idx],
+                           loc_restrictions=self.loc_restrictions,
+                           place_remaining_randomly=self.place_remaining_randomly)
         img.update_class_labels(self.class_configs)
         return img
 
