@@ -285,14 +285,14 @@ class ElementDataset:
                                    f"in the max no. iterations ({max_iter})")
         return configs
 
-    def save_imgs(self, prefix, indices=None):
+    def save_imgs(self, prefix, indices=None, extension=".png"):
         if indices is None:
             indices = range(self.n)
 
         for i in indices:
             img = self.get_item(i)
             img = Image.fromarray(img.img)
-            img.save(f"{prefix}{i:04d}.jpg")
+            img.save(f"{prefix}{i:04d}{extension}")
 
 
 class GroupedElementDataset(ElementDataset):
