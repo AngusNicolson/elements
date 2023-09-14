@@ -230,9 +230,6 @@ def check_restriction(restriction, v):
     elif command == "<":
         if v < value:
             return True
-    elif command == "=":
-        if v == value:
-            return True
     else:
         raise ValueError(f"Command {command} not recognised!")
 
@@ -401,6 +398,13 @@ class ConceptElementDatasetCreator:
         self.base_loc_seed = 1997
         self.seed_max = 1000000
 
+        self.location_keywords = {
+            "left": ["<127", ">0"],
+            "right": [">127", ">0"],
+            "bot": [">0", ">127"],
+            "top": [">0", "<127"],
+        }
+
     def __call__(self, concept):
         try:
             concept = int(concept)
@@ -429,6 +433,15 @@ class ConceptElementDatasetCreator:
         return dataset
 
     def create_concept_dataset(self, concept):
+
+        concept, loc_restriction = self.check_for_location_keywords(concept)
+
+        # If there is a location restriction, don't place all elements if they don't fit
+        if loc_restriction is None:
+            place_remaining_randomly = True
+        else:
+            place_remaining_randomly = False
+
         concept_type = None
         for k, v in self.allowed.items():
             if concept in v:
@@ -440,5 +453,30 @@ class ConceptElementDatasetCreator:
         allowed_concept = deepcopy(self.allowed)
         allowed_concept[concept_type] = [concept]
 
-        dataset = ElementDataset(allowed_concept, self.class_configs, allowed_combinations=self.allowed_combinations, **self.dataset_kwargs)
+        dataset = ElementDataset(
+            allowed_concept,
+            self.class_configs,
+            allowed_combinations=self.allowed_combinations,
+            loc_restrictions=loc_restriction,
+            place_remaining_randomly=place_remaining_randomly,
+            **self.dataset_kwargs
+        )
         return dataset
+
+    def check_for_location_keywords(self, concept):
+        """
+        Check if the concept has a location restriction applied to it
+
+        :param concept: Name of the concept with optional appended location restriction (str)
+        :return: A tuple of Concept name, and location restriction  (str, Union(None, List[List[str]]))
+        """
+        # location has to be appended to the concept name with _
+        potential_location_keyword = concept.split("_")[-1]
+        if potential_location_keyword in self.location_keywords.keys():
+            location_restriction = self.location_keywords[potential_location_keyword]
+            concept = "_".join(concept.split("_")[:-1])
+            return concept, [location_restriction]
+        else:
+            # If not recognised, assume no location restrictions
+            return concept, None
+
