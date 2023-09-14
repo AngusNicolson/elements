@@ -59,6 +59,9 @@ class Element(Dataset):
 
         self.img = shapes[shape](size)
 
+        # Set to True to ignore this element when determining class
+        self.ignore = False
+
         # Apply texture
         if texture == "solid":
             texture = None
@@ -81,6 +84,10 @@ class Element(Dataset):
         return "Element <" + ", ".join([f"{k}: {v}" for k, v in self.config.items()]) + ">"
 
     def belongs_to_class(self, class_config):
+        # This flag means we ignore the element when determining class
+        # Currently used if the element was not placed in the image
+        if self.ignore:
+            return False
         belongs = True
         for k, v in class_config.items():
             if v is None:
@@ -104,6 +111,11 @@ class ElementImage:
 
         self.img = np.zeros((size, size, 3), dtype=np.uint8) + 255
         self.locs = self.choose_locations(size, elements, loc_seed, loc_restrictions=loc_restrictions, place_remaining_randomly=place_remaining_randomly)
+        if not place_remaining_randomly:
+            # Ignore elements that could not be placed. Important for class labelling
+            for i in range(len(self.elements)):
+                if self.locs[i] is None:
+                    elements[i].ignore = True
 
         self.config = {
             "elements": [v.config for v in self.elements],
@@ -408,18 +420,41 @@ class ConceptElementDatasetCreator:
         }
 
     def __call__(self, concept):
+        concept, loc_restriction = self.check_for_location_keywords(concept)
         try:
             concept = int(concept)
-            self.class_dataset.current_label = concept
-            return self.class_dataset
+            if loc_restriction is None:
+                self.class_dataset.current_label = concept
+                return self.class_dataset
+            else:
+                # If applying a location restriction we need to recreate the class
+                # dataset so that the images are labelled correctly.
+                # Expensive as we have to loop through all the images again.
+                class_dataset = GroupedElementDataset(
+                    allowed=self.allowed,
+                    class_configs=self.class_configs,
+                    allowed_combinations=self.allowed_combinations,
+                    loc_restrictions=loc_restriction,
+                    place_remaining_randomly=False,
+                    **self.dataset_kwargs
+                )
+                class_dataset.current_label = concept
+                return class_dataset
+
         except ValueError:
             if "random" in concept:
                 random_idx = int(concept.split("_")[-1])
-                return self.create_random_dataset(random_idx)
+                return self.create_random_dataset(random_idx, loc_restriction)
             else:
-                return self.create_concept_dataset(concept)
+                return self.create_concept_dataset(concept, loc_restriction)
 
-    def create_random_dataset(self, idx):
+    def create_random_dataset(self, idx, loc_restriction=None):
+        # If there is a location restriction, don't place all elements if they don't fit
+        if loc_restriction is None:
+            place_remaining_randomly = True
+        else:
+            place_remaining_randomly = False
+
         # Probably more complicated than it needs to be, but this makes it very unlikely
         # that we'll have two random datasets with the same random seed or that they're
         # the same as in the train or test sets of the model itself
@@ -431,12 +466,17 @@ class ConceptElementDatasetCreator:
         kwargs = deepcopy(self.dataset_kwargs)
         kwargs["element_seed"] = element_seed
         kwargs["loc_seed"] = loc_seed
-        dataset = ElementDataset(self.allowed, self.class_configs, allowed_combinations=self.allowed_combinations, **kwargs)
+        dataset = ElementDataset(
+            self.allowed,
+            self.class_configs,
+            allowed_combinations=self.allowed_combinations,
+            loc_restrictions=loc_restriction,
+            place_remaining_randomly=place_remaining_randomly,
+            **kwargs
+        )
         return dataset
 
-    def create_concept_dataset(self, concept):
-
-        concept, loc_restriction = self.check_for_location_keywords(concept)
+    def create_concept_dataset(self, concept, loc_restriction=None):
 
         # If there is a location restriction, don't place all elements if they don't fit
         if loc_restriction is None:
