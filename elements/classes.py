@@ -188,8 +188,8 @@ class ElementImage:
                 if loc_restrictions is not None:
                     failed_restriction = False
                     for loc_restriction in loc_restrictions:
-                        x_passes = check_restriction(loc_restriction[0], y)
-                        y_passes = check_restriction(loc_restriction[1], x)
+                        x_passes = check_restriction(loc_restriction[0], y, element_size)
+                        y_passes = check_restriction(loc_restriction[1], x, element_size)
                         if (not x_passes) or (not y_passes):
                             failed_restriction = True
                     if failed_restriction:
@@ -221,14 +221,16 @@ class ElementImage:
         return locations
 
 
-def check_restriction(restriction, v):
+def check_restriction(restriction, v, element_size):
     command = restriction[0]
     value = int(restriction[1:])
     if command == ">":
         if v > value:
             return True
     elif command == "<":
-        if v < value:
+        # Because we place by the top_left corner
+        # we need to shift the placement for left/top placements
+        if v + element_size < value:
             return True
     else:
         raise ValueError(f"Command {command} not recognised!")
