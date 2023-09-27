@@ -398,7 +398,7 @@ class ConceptElementDatasetCreator:
      - a single class
      - a single concept
      - a random selection of images
-     For use with TCAV."""
+     For use with CAVs."""
     def __init__(self, allowed, class_configs, dataset_kwargs, allowed_combinations=None):
         self.allowed = allowed
         self.class_configs = class_configs
