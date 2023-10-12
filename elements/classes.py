@@ -45,6 +45,13 @@ textures = {
     },
 }
 
+location_keywords = {
+    "left": ["<127", ">0"],
+    "right": [">127", ">0"],
+    "bot": [">0", ">127"],
+    "top": [">0", "<127"],
+}
+
 
 class Element(Dataset):
     def __init__(self, size, shape, color, texture=None, color_seed=None, texture_seed=None):
@@ -146,9 +153,19 @@ class ElementImage:
         return "ElementImage <" + ", ".join([f"{k}: {v}" for k, v in self.config.items()]) + ">"
 
     def belongs_to_class(self, class_config):
-        for element in self.elements:
-            if element.belongs_to_class(class_config):
-                return True
+        for i, element in enumerate(self.elements):
+            config_without_loc = {k: v for k, v in class_config.items() if k != "loc"}
+            if element.belongs_to_class(config_without_loc):
+                if "loc" in class_config.keys():
+                    restriction = location_keywords[class_config["loc"]]
+                    loc = self.locs[i]
+                    failed_restriction = self.check_fail_loc_restriction(
+                        restriction, loc[0], loc[1], element.size
+                    )
+                    if not failed_restriction:
+                        return True
+                else:
+                    return True
         return False
 
     def update_class_labels(self, class_configs):
@@ -200,10 +217,9 @@ class ElementImage:
                 if loc_restrictions is not None:
                     failed_restriction = False
                     for loc_restriction in loc_restrictions:
-                        x_passes = check_restriction(loc_restriction[0], y, element_size)
-                        y_passes = check_restriction(loc_restriction[1], x, element_size)
-                        if (not x_passes) or (not y_passes):
-                            failed_restriction = True
+                        failed_restriction = ElementImage.check_fail_loc_restriction(loc_restriction, x, y, element_size)
+                        if failed_restriction:
+                            break
                     if failed_restriction:
                         # If it fails a location restriction, try a different position
                         continue
@@ -231,6 +247,18 @@ class ElementImage:
                         locations.append(None)
                     break
         return locations
+
+    @staticmethod
+    def check_fail_loc_restriction(loc_restriction, x, y, element_size):
+        """
+        Returns True if the location/size of the element does not pass the restriction
+        """
+        x_passes = check_restriction(loc_restriction[0], y, element_size)
+        y_passes = check_restriction(loc_restriction[1], x, element_size)
+        if (not x_passes) or (not y_passes):
+            return True
+        else:
+            return False
 
 
 def check_restriction(restriction, v, element_size):
@@ -412,13 +440,6 @@ class ConceptElementDatasetCreator:
         self.base_loc_seed = 1997
         self.seed_max = 1000000
 
-        self.location_keywords = {
-            "left": ["<127", ">0"],
-            "right": [">127", ">0"],
-            "bot": [">0", ">127"],
-            "top": [">0", "<127"],
-        }
-
     def __call__(self, concept):
         concept, loc_restriction = self.check_for_location_keywords(concept)
         try:
@@ -514,8 +535,8 @@ class ConceptElementDatasetCreator:
         """
         # location has to be appended to the concept name with _
         potential_location_keyword = concept.split("_")[-1]
-        if potential_location_keyword in self.location_keywords.keys():
-            location_restriction = self.location_keywords[potential_location_keyword]
+        if potential_location_keyword in location_keywords.keys():
+            location_restriction = location_keywords[potential_location_keyword]
             concept = "_".join(concept.split("_")[:-1])
             return concept, [location_restriction]
         else:
