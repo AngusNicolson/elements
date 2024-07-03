@@ -1,6 +1,8 @@
 # Elements
 A configurable synthetic dataset of simple shapes with ground truth concepts and known causal relationships between concepts and classes.
 
+First released as part of Explaining Explainability: Understanding Concept Activation Vectors by Nicolson et al. https://arxiv.org/abs/2404.03713.
+
 colors.py, shapes.py and textures.py each contain the basic code for creating the concepts. If you wish, there is no reason you could not add more concepts here.
 
 classes.py contains most of the code. Here are the important classes for this repository:
